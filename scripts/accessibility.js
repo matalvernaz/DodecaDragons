@@ -21,6 +21,8 @@
   // (a new area unlocking, an on-demand readout) are spoken here.
   let politeRegion = null;
   let assertiveRegion = null;
+  let politeTimer = null;
+  let assertiveTimer = null;
 
   function makeLiveRegion(id, politeness) {
     const el = document.createElement("div");
@@ -38,8 +40,16 @@
   function announce(message, assertive) {
     const region = assertive ? assertiveRegion : politeRegion;
     if (!region || !message) return;
+    // Clear any pending write for this region so rapid calls don't stack timers
+    // and race; the latest message wins rather than all firing at once.
+    if (assertive && assertiveTimer) clearTimeout(assertiveTimer);
+    if (!assertive && politeTimer) clearTimeout(politeTimer);
     region.textContent = "";
-    setTimeout(function () { region.textContent = message; }, RELISTEN_DELAY_MS);
+    const id = setTimeout(function () {
+      region.textContent = message;
+      if (assertive) assertiveTimer = null; else politeTimer = null;
+    }, RELISTEN_DELAY_MS);
+    if (assertive) assertiveTimer = id; else politeTimer = id;
   }
   window.announce = announce; // exposed so game code can be wired to it later
 
@@ -136,16 +146,21 @@
   });
 
   // --- Announce newly unlocked areas --------------------------------------
-  let lastUnlocks = 0;
+  let lastUnlocks = null;
   function watchUnlocks() {
     if (typeof game !== "object" || !game || typeof tabData !== "object") return;
+    // First tick after the save loads: adopt the current count as the baseline so
+    // we don't announce every already-unlocked area to a returning player.
+    if (lastUnlocks === null) { lastUnlocks = game.unlocks; return; }
     if (game.unlocks > lastUnlocks) {
+      const names = [];
       for (let lvl = lastUnlocks + 1; lvl <= game.unlocks; lvl++) {
-        const names = Object.keys(tabData)
-          .filter(function (k) { return tabData[k][2] === lvl; })
-          .map(humanize);
-        if (names.length) announce("New area unlocked: " + names.join(", "));
+        Object.keys(tabData).forEach(function (k) {
+          if (tabData[k][2] === lvl) names.push(humanize(k));
+        });
       }
+      // Coalesce into one message; separate announce() calls would clobber.
+      if (names.length) announce("New area unlocked: " + names.join(", "));
     }
     lastUnlocks = game.unlocks;
   }

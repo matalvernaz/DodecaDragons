@@ -25,12 +25,9 @@ if (mobileCheck()) {
   };
 }
 
-//prevents user from tab indexing
-document.addEventListener("keydown", (event) => {
-	if (event.key == "Tab") {
-			event.preventDefault();
-	}
-});
+// Tab was previously preventDefault()ed globally to stop focus moving between
+// the spatially-arranged buttons. That blocks keyboard and screen-reader users
+// from reaching the focusable controls accessibility.js adds, so it's removed.
 
 window.isDevVersion = window.location.href.indexOf('demonin.com') == -1
 if (isDevVersion) {
@@ -464,10 +461,25 @@ function setAutoSave() {
 setAutoSave()
 //setInterval(save(), 5000)
 
+// btoa/atob only handle Latin-1, so a Unicode dragonName (e.g. emoji) would throw
+// on export. Round-trip through UTF-8 bytes. Decoding plain-ASCII saves is
+// unchanged, so old export strings still import.
+function encodeSave(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function decodeSave(b64) {
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 function exportGame() {
   save()
   let inputField = document.getElementById("exportField");
-  inputField.value = btoa(JSON.stringify(game));
+  inputField.value = encodeSave(JSON.stringify(game));
   if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
     let editable = inputField.contentEditable;
     let readOnly = inputField.readOnly;
@@ -490,9 +502,14 @@ function exportGame() {
 }
 
 function importGame() {
-  //loadgame = JSON.parse(atob(prompt("Input your save here:")))
-  let loadgame = JSON.parse(atob(document.getElementById("exportField").value));
-  if (loadgame && loadgame != null && loadgame != "") {
+  let loadgame;
+  try {
+    loadgame = JSON.parse(decodeSave(document.getElementById("exportField").value));
+  } catch (e) {
+    alert("Invalid input.");
+    return;
+  }
+  if (loadgame && typeof loadgame === "object") {
     reset()
     loadGame(loadgame)
     save()
@@ -504,8 +521,17 @@ function importGame() {
 
 function load() {
 	reset()
-	let loadgame = JSON.parse(localStorage.getItem("dodecaSave"))
-  //loadgame.kkkgl();
+	let loadgame = null;
+	try {
+		loadgame = JSON.parse(localStorage.getItem("dodecaSave"))
+	} catch (e) {
+		// A corrupt save would otherwise throw here and leave the loading cover up
+		// while autosave quietly overwrites it with defaults (silent progress loss).
+		// Quarantine it instead so it can be recovered manually.
+		localStorage.setItem("dodecaSave_corrupt", localStorage.getItem("dodecaSave"));
+		localStorage.removeItem("dodecaSave");
+		alert("Your save could not be read and has been backed up (dodecaSave_corrupt). Starting fresh.");
+	}
 	if (loadgame != null) {loadGame(loadgame)}
   else {document.getElementById("loadingScreenCover").style.display = "none"}
 }
@@ -524,8 +550,11 @@ function loadGame(loadgame) {
   //Sets each variable in 'game' to the equivalent variable in 'loadgame' (the saved file)
   let loadKeys = Object.keys(loadgame);
   for (i=0; i<loadKeys.length; i++) {
-    if (loadgame[loadKeys[i]] != "undefined") {
-      let thisKey = loadKeys[i];
+    let thisKey = loadKeys[i];
+    // A save with a "__proto__"/"constructor" key (own property via JSON.parse)
+    // would otherwise reassign game's prototype on the bracket-set below.
+    if (thisKey === "__proto__" || thisKey === "constructor" || thisKey === "prototype") continue;
+    if (loadgame[loadKeys[i]] !== undefined) {
       if (typeof loadgame[thisKey] == "string" && thisKey != "dragonName") {game[thisKey] = new Decimal(loadgame[thisKey])}
       else if (Array.isArray(loadgame[thisKey]) && game[loadKeys[i]]) { // If the value is an array and the corresponding key exists in the game object
         for (j = 0; j < loadgame[thisKey].length; j++) { // Iterate through the array elements
