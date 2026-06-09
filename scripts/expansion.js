@@ -28,6 +28,7 @@
 
     if (typeof game.settings !== "object" || game.settings === null) game.settings = {};
     if (game.settings.offlineEnabled === undefined) game.settings.offlineEnabled = true;
+    if (game.settings.quietMode === undefined) game.settings.quietMode = true;
 
     if (typeof game.stats !== "object" || game.stats === null) game.stats = {};
     if (game.stats.firstPlayed === undefined) game.stats.firstPlayed = Date.now();
@@ -352,6 +353,11 @@
       ["Constellation board", function () { if (typeof window.openConstellation === "function") window.openConstellation(); else alert("Reach the omniverse to unlock this."); }],
       ["Offline progress: " + (game.settings.offlineEnabled ? "On" : "Off"), function () {
         game.settings.offlineEnabled = !game.settings.offlineEnabled; togglePanel(); togglePanel();
+      }],
+      ["Screen reader quiet mode: " + (game.settings.quietMode !== false ? "On" : "Off"), function () {
+        game.settings.quietMode = (game.settings.quietMode === false);
+        if (typeof window.applyQuietMode === "function") window.applyQuietMode();
+        togglePanel(); togglePanel();
       }]
     ];
     items.forEach(function (it) {

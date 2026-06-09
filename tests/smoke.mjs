@@ -110,6 +110,29 @@ try {
   console.log("render() cost @ full unlocks:", JSON.stringify(renderCost));
   // Reported, not gated — tracks the render path's synchronous cost over time.
 
+  // Quiet mode: the per-tick rate spans must be out of the accessibility tree
+  // (this is the NVDA-churn fix). Also report the live a11y tree node count.
+  const a11y = await page.evaluate(() => {
+    const perSec = document.querySelectorAll('[id$="PerSecond"],[id$="PerClick"]');
+    let hidden = 0;
+    perSec.forEach((e) => { if (e.getAttribute("aria-hidden") === "true") hidden++; });
+    const firstRow = document.querySelector(".resourceRow");
+    const resTab = firstRow && firstRow.closest(".box");
+    return {
+      quietMode: !!(window.game && window.game.settings && window.game.settings.quietMode !== false),
+      perSecTotal: perSec.length,
+      perSecHidden: hidden,
+      resTabHidden: !!(resTab && resTab.getAttribute("aria-hidden") === "true")
+    };
+  });
+  console.log("a11y quiet mode:", JSON.stringify(a11y));
+  const snap = await page.accessibility.snapshot();
+  const countNodes = (n) => (n ? 1 + (n.children || []).reduce((a, c) => a + countNodes(c), 0) : 0);
+  console.log("a11y tree nodes:", countNodes(snap));
+  if (a11y.quietMode && a11y.perSecTotal > 0 && a11y.perSecHidden !== a11y.perSecTotal) {
+    fail("quiet mode left " + (a11y.perSecTotal - a11y.perSecHidden) + " rate span(s) in the a11y tree");
+  }
+
   if (errors.length) { errors.forEach((e) => console.error("  " + e)); fail(errors.length + " console/page error(s)"); }
 } catch (e) {
   fail("smoke threw: " + e.message);

@@ -105,7 +105,29 @@
       const el = document.getElementById(id);
       if (el && !el.hasAttribute("aria-hidden")) el.setAttribute("aria-hidden", "true");
     });
+
+    applyQuietMode();
   }
+
+  // Quiet mode: the game rewrites ~275 text nodes every 150ms. For a screen
+  // reader that is a constant flood of accessibility-tree events that keeps
+  // NVDA's virtual buffer churning and makes browse mode and keystrokes lag.
+  // The continuously-updating rate displays are redundant with the R readout,
+  // so we drop them from the accessibility tree (aria-hidden) — their text is
+  // still readable by JS for the readout. Toggleable; default on.
+  function quietModeOn() {
+    return !(typeof game === "object" && game && game.settings && game.settings.quietMode === false);
+  }
+  function applyQuietMode() {
+    const on = quietModeOn();
+    document.querySelectorAll('[id$="PerSecond"], [id$="PerClick"]').forEach(function (el) {
+      if (on) el.setAttribute("aria-hidden", "true"); else el.removeAttribute("aria-hidden");
+    });
+    const firstRow = document.querySelector(".resourceRow");
+    const resTab = firstRow && firstRow.closest(".box");
+    if (resTab) { if (on) resTab.setAttribute("aria-hidden", "true"); else resTab.removeAttribute("aria-hidden"); }
+  }
+  window.applyQuietMode = applyQuietMode;
 
   // --- Keyboard activation -------------------------------------------------
   // Enter/Space triggers a click on any control we promoted to role="button".
@@ -168,13 +190,18 @@
   // --- On-demand stat readout ----------------------------------------------
   // The core idle loop is "watch a number rise". R speaks the headline totals
   // so a screen-reader user needn't re-hunt for them in browse mode.
-  function readStats() {
-    const parts = [];
-    const gold = textOf("gold");
+  // Full on-demand snapshot of every unlocked resource. Reuses the already
+  // labelled ".resourceRow" elements ("Gold: 1.2M", "Fire: 3.4K", ...), which
+  // are hidden from the live a11y tree in quiet mode but still readable here.
+  function readAll() {
+    const rows = Array.prototype.slice.call(document.querySelectorAll(".resourceRow"))
+      .filter(function (r) { return r.offsetParent !== null; }) // unlocked = not display:none
+      .map(function (r) { return r.textContent.replace(/\s+/g, " ").trim(); })
+      .filter(Boolean);
     const gps = textOf("goldPerSecond");
-    if (gold) parts.push(gold + " gold");
-    if (gps) parts.push(gps + " per second");
-    if (parts.length) announce(parts.join(", "));
+    let msg = rows.join(". ");
+    if (gps) msg += (msg ? ". " : "") + gps + " gold per second";
+    announce(msg || "No resources yet.");
   }
 
   // --- Bootstrap -----------------------------------------------------------
@@ -197,9 +224,9 @@
     setInterval(enhance, ENHANCE_INTERVAL_MS);
     setInterval(watchUnlocks, UNLOCK_POLL_MS);
 
-    if (typeof Mousetrap !== "undefined") Mousetrap.bind("r", readStats);
+    if (typeof Mousetrap !== "undefined") Mousetrap.bind("r", readAll);
 
-    announce("DodecaDragons loaded. Press R at any time to hear your gold total.");
+    announce("DodecaDragons loaded. Press R at any time to hear your resources.");
   }
 
   if (document.readyState === "loading") {
