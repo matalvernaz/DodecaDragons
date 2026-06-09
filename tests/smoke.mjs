@@ -170,8 +170,10 @@ try {
   if (guard.afterWrite !== "GUARD_TEST_1" || guard.afterSame !== "GUARD_TEST_1" || guard.afterChange !== "GUARD_TEST_2" || !guard.restored) {
     fail("write-on-change guard dropped or corrupted a write");
   }
-  if (a11y.quietMode && a11y.perSecTotal > 0 && a11y.perSecHidden !== a11y.perSecTotal) {
-    fail("quiet mode left " + (a11y.perSecTotal - a11y.perSecHidden) + " rate span(s) in the a11y tree");
+  // Quiet mode was reverted (it stripped inline rate numbers). Rate spans must
+  // now be VISIBLE to the screen reader, not aria-hidden.
+  if (a11y.perSecHidden > 0) {
+    fail(a11y.perSecHidden + " rate span(s) still aria-hidden — quiet-mode revert incomplete");
   }
 
   if (errors.length) { errors.forEach((e) => console.error("  " + e)); fail(errors.length + " console/page error(s)"); }
