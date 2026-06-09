@@ -115,17 +115,17 @@
   // The continuously-updating rate displays are redundant with the R readout,
   // so we drop them from the accessibility tree (aria-hidden) — their text is
   // still readable by JS for the readout. Toggleable; default on.
-  function quietModeOn() {
-    return !(typeof game === "object" && game && game.settings && game.settings.quietMode === false);
-  }
+  // Quiet mode was a mistake: aria-hiding the inline rate spans stripped numbers
+  // out of sentences ("You have X gold (/s, /click)" -> blanks) without helping
+  // navigation. This now only UN-hides anything a prior version hid, cleaning up
+  // existing sessions. Churn is to be handled by write-on-change instead.
   function applyQuietMode() {
-    const on = quietModeOn();
-    document.querySelectorAll('[id$="PerSecond"], [id$="PerClick"]').forEach(function (el) {
-      if (on) el.setAttribute("aria-hidden", "true"); else el.removeAttribute("aria-hidden");
+    document.querySelectorAll('[id$="PerSecond"][aria-hidden], [id$="PerClick"][aria-hidden]').forEach(function (el) {
+      el.removeAttribute("aria-hidden");
     });
     const firstRow = document.querySelector(".resourceRow");
     const resTab = firstRow && firstRow.closest(".box");
-    if (resTab) { if (on) resTab.setAttribute("aria-hidden", "true"); else resTab.removeAttribute("aria-hidden"); }
+    if (resTab) resTab.removeAttribute("aria-hidden");
   }
   window.applyQuietMode = applyQuietMode;
 
