@@ -435,9 +435,12 @@
       } catch (e) { console.warn("expansion pre-load skipped:", e); }
       origLoad.apply(this, arguments);
       try { ensureDefaults(); } catch (e) { console.warn("ensureDefaults skipped:", e); }
-      if (lastSave) {
-        try { applyOfflineProgress(Date.now() - lastSave); } catch (e) { console.warn("offline progress skipped:", e); }
-      }
+      // DISABLED: offline progress replayed the full updateLarge() tick — which
+      // fires auto-feed, auto-spend-time, the sigil auto-resetter and auto-
+      // conversions — hundreds of times on load, mutating/wiping real saves.
+      // To be reimplemented as production-only (add perSecond*dt, no side-effect
+      // automation). Do not re-enable the updateLarge replay.
+      // if (lastSave) applyOfflineProgress(Date.now() - lastSave);
     };
   }
 

@@ -554,7 +554,9 @@ function loadGame(loadgame) {
     // A save with a "__proto__"/"constructor" key (own property via JSON.parse)
     // would otherwise reassign game's prototype on the bracket-set below.
     if (thisKey === "__proto__" || thisKey === "constructor" || thisKey === "prototype") continue;
-    if (loadgame[loadKeys[i]] !== undefined) {
+    // Skip both real undefined and the legacy literal "undefined" sentinel that
+    // old saves can contain — copying that string in poisons Decimal fields (NaN).
+    if (loadgame[loadKeys[i]] !== undefined && loadgame[loadKeys[i]] !== "undefined") {
       if (typeof loadgame[thisKey] == "string" && thisKey != "dragonName") {game[thisKey] = new Decimal(loadgame[thisKey])}
       else if (Array.isArray(loadgame[thisKey]) && game[loadKeys[i]]) { // If the value is an array and the corresponding key exists in the game object
         for (j = 0; j < loadgame[thisKey].length; j++) { // Iterate through the array elements
