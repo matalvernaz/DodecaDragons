@@ -2213,12 +2213,15 @@ function updateSmall() {
   //if (game.unlocks >= 13) game.violetSigilPower = game.violetSigilPower.add(game.violetSigilPowerPerSecond.mul(diff))
   //if (game.unlocks >= 14) game.pinkSigilPower = game.pinkSigilPower.add(game.pinkSigilPowerPerSecond.mul(diff))
   //if (game.unlockedAchievements[5] > 3) game.uranium = game.uranium.add(game.uraniumToGet.mul(diff))
-  //if (game.unlockedAchievements[0] > 8 && game.minerAutoBuyMax) buyMaxMiners()  
+  //if (game.unlockedAchievements[0] > 8 && game.minerAutoBuyMax) buyMaxMiners()
+  // Constellation board (omniverse.js): apply NG+ node bonuses to the freshly
+  // recomputed per-second rates. Idempotent — rates are rebuilt each tick above.
+  if (typeof omniApply === "function") omniApply();
 }
 updateSmall()
 setInterval(updateSmall, 150)
 
-let timeSinceLastUpdate = Date.now()
+window.timeSinceLastUpdate = Date.now() // window-scoped so offline progress (expansion.js) can drive the tick delta
 //Large update (occurs once per second)
 function updateLarge() {
   if (timeStopped) return;
