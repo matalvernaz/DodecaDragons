@@ -9,7 +9,10 @@ renderVars = {
   currentMousePos: [0, 0],
   lastRender: Date.now(),
   autoPanTime: 1500,
-  isAutoPanning: false
+  isAutoPanning: false,
+  lastRenderedX: null,      // dirty-flag: skip re-rendering an unchanged position
+  lastRenderedY: null,
+  dragonTabHeight: 0        // cached so render() needn't force a reflow each frame
 }
 
 cachedBoxes = []
@@ -70,10 +73,10 @@ function render(x, y) {
   //Main tab
   cachedBoxes[0].style.left = (x) + "px"
   cachedBoxes[0].style.top = (y) + "px"
-  //Dragon tab
+  //Dragon tab — uses cached height instead of a per-frame getBoundingClientRect
+  //(that read forced a synchronous reflow on every render, the main pan-lag cost)
   cachedBoxes[3].style.left = (x) + "px"
-  dragonTabHeight = cachedBoxes[3].getBoundingClientRect().height 
-  cachedBoxes[3].style.top = (y + 162 + dragonTabHeight/2) + "px"
+  cachedBoxes[3].style.top = (y + 162 + renderVars.dragonTabHeight/2) + "px"
   if (game.unlocks >= 1) {
     //Fire upgrades tab
     cachedBoxes[4].style.left = (x - 365) + "px"
@@ -263,14 +266,29 @@ function render(x, y) {
 	if (game.unlocks >= 29) cachedBoxes[38].style.backgroundPosition = (x / 6) + "px " + (y / 6) + "px"
   //console.log(Date.now() - renderVars.lastRender)
   renderVars.lastRender = Date.now();
+  renderVars.lastRenderedX = x;
+  renderVars.lastRenderedY = y;
 }
+
+// Cache the dragon tab's height out of the hot render path. Refreshed on a slow
+// interval and on resize; a tab's vertical centring being up to 1s stale is
+// imperceptible, and the tab is hidden (height 0) until the dragon unlocks.
+function refreshDragonTabHeight() {
+  if (cachedBoxes[3]) renderVars.dragonTabHeight = cachedBoxes[3].getBoundingClientRect().height;
+}
+refreshDragonTabHeight();
+setInterval(refreshDragonTabHeight, 1000);
+window.addEventListener('resize', refreshDragonTabHeight);
 
 render(renderVars.posX, renderVars.posY)
 
-//Automatically renders 10 times per second (there's probably a better way to do this)
+//Automatically renders 10 times per second, but only when the position actually
+//changed — idle no longer triggers a layout+repaint storm 10x/second.
 function renderAuto() {
-  //render(renderVars.posX, renderVars.posY)
-  render(renderVars.posX + renderVars.diffX, renderVars.posY + renderVars.diffY)
+  const tx = renderVars.posX + renderVars.diffX;
+  const ty = renderVars.posY + renderVars.diffY;
+  if (tx === renderVars.lastRenderedX && ty === renderVars.lastRenderedY) return;
+  render(tx, ty)
 }
 setInterval(renderAuto, 100)
 

@@ -93,7 +93,22 @@ try {
     requestAnimationFrame(tick);
   }));
   console.log("perf (frame intervals):", JSON.stringify(perf));
-  // Reported, not gated yet — this is the baseline the render refactor improves.
+
+  // The real lag proxy: synchronous cost of render() with every box active
+  // (a fresh idle game barely exercises it). This is what the render work targets.
+  const renderCost = await page.evaluate(() => {
+    if (typeof render !== "function" || typeof game === "undefined" || !game) return null;
+    const saved = game.unlocks;
+    game.unlocks = 36; // unlock all layers so render() positions all 47 boxes
+    const N = 200, cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) render(cx + (i % 40) - 20, cy + (i % 30) - 15);
+    const t1 = performance.now();
+    game.unlocks = saved;
+    return { calls: N, totalMs: +(t1 - t0).toFixed(2), perCallMs: +((t1 - t0) / N).toFixed(3) };
+  });
+  console.log("render() cost @ full unlocks:", JSON.stringify(renderCost));
+  // Reported, not gated — tracks the render path's synchronous cost over time.
 
   if (errors.length) { errors.forEach((e) => console.error("  " + e)); fail(errors.length + " console/page error(s)"); }
 } catch (e) {
