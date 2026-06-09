@@ -129,6 +129,26 @@ try {
   const snap = await page.accessibility.snapshot();
   const countNodes = (n) => (n ? 1 + (n.children || []).reduce((a, c) => a + countNodes(c), 0) : 0);
   console.log("a11y tree nodes:", countNodes(snap));
+
+  // Main-thread cost of the per-tick work with everything unlocked. This is the
+  // real suspect for NVDA slowness (heavy work every 150ms starves the browser's
+  // main thread, which NVDA queries). Per-call ms, averaged.
+  const tick = await page.evaluate(() => {
+    if (typeof updateSmall !== "function" || typeof game === "undefined" || !game) return null;
+    const saved = game.unlocks;
+    game.unlocks = 36; // open every `if (unlocks >= N)` branch so all ~275 writes run
+    let threw = 0;
+    const time = (fn, N) => {
+      const t0 = performance.now();
+      for (let i = 0; i < N; i++) { try { fn(); } catch (e) { threw++; } }
+      return (performance.now() - t0) / N;
+    };
+    const small = time(updateSmall, 50);
+    const large = (typeof updateLarge === "function") ? time(updateLarge, 50) : 0;
+    game.unlocks = saved;
+    return { updateSmallMs: +small.toFixed(2), updateLargeMs: +large.toFixed(2), threwPerCall: +(threw / 100).toFixed(2) };
+  });
+  console.log("tick cost @ full unlocks:", JSON.stringify(tick));
   if (a11y.quietMode && a11y.perSecTotal > 0 && a11y.perSecHidden !== a11y.perSecTotal) {
     fail("quiet mode left " + (a11y.perSecTotal - a11y.perSecHidden) + " rate span(s) in the a11y tree");
   }
