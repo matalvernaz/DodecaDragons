@@ -15,6 +15,30 @@
   const ENHANCED_ATTR = "data-a11y"; // marks an element we've already processed
   const RELISTEN_DELAY_MS = 50;      // gap before re-setting identical live text
 
+  // --- Write-on-change guard (NVDA churn fix) ------------------------------
+  // The game rewrites ~275 text nodes every 150ms; most writes set the SAME
+  // value, but each one still mutates the DOM and forces NVDA to rebuild its
+  // virtual buffer, which is what makes navigation lag. We redefine textContent
+  // on the game's value spans so an identical-text write on a pure-text leaf is
+  // skipped — behaviourally a no-op (the DOM ends up identical), but no mutation
+  // event fires. Scoped per element (not a global prototype override) and only
+  // short-circuits leaves with no child elements, so it can't drop a write that
+  // is meant to replace child nodes.
+  const TEXT_DESC = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+  function guardTextContent(el) {
+    if (!el || el.__a11yTextGuarded || !TEXT_DESC) return;
+    el.__a11yTextGuarded = true;
+    Object.defineProperty(el, "textContent", {
+      configurable: true,
+      enumerable: false,
+      get: function () { return TEXT_DESC.get.call(this); },
+      set: function (v) {
+        if (this.childElementCount === 0 && TEXT_DESC.get.call(this) === String(v)) return;
+        TEXT_DESC.set.call(this, v);
+      }
+    });
+  }
+
   // --- Live regions --------------------------------------------------------
   // The game rewrites resource counters many times per second; those must NOT
   // be announced or the screen reader is rendered useless. Only discrete events
@@ -105,6 +129,17 @@
       const el = document.getElementById(id);
       if (el && !el.hasAttribute("aria-hidden")) el.setAttribute("aria-hidden", "true");
     });
+
+    // Each window becomes a labelled landmark region, so NVDA's D key cycles
+    // window-to-window as an alternative to the H (heading) navigation above.
+    document.querySelectorAll(".box").forEach(function (box) {
+      if (box.getAttribute("role") === "region") return;
+      const t = box.querySelector(".title-bar-text");
+      if (t) { box.setAttribute("role", "region"); box.setAttribute("aria-label", t.textContent.trim()); }
+    });
+
+    // Write-on-change guard on the game's value spans (see TEXT_DESC above).
+    document.querySelectorAll(".window-body a").forEach(guardTextContent);
 
     applyQuietMode();
   }

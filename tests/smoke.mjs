@@ -149,6 +149,27 @@ try {
     return { updateSmallMs: +small.toFixed(2), updateLargeMs: +large.toFixed(2), threwPerCall: +(threw / 100).toFixed(2) };
   });
   console.log("tick cost @ full unlocks:", JSON.stringify(tick));
+
+  // Write-on-change guard must still let real writes through and must no-op
+  // safely on an identical write (the "value silently stops updating" risk).
+  const guard = await page.evaluate(() => {
+    const el = document.getElementById("minerCost");
+    if (!el) return { ok: false, reason: "no minerCost element" };
+    const before = el.textContent;
+    el.textContent = "GUARD_TEST_1";
+    const afterWrite = el.textContent;
+    el.textContent = "GUARD_TEST_1"; // identical -> skip path, must not throw
+    const afterSame = el.textContent;
+    el.textContent = "GUARD_TEST_2"; // changed -> must apply
+    const afterChange = el.textContent;
+    el.textContent = before;
+    return { guarded: !!el.__a11yTextGuarded, afterWrite, afterSame, afterChange, restored: el.textContent === before };
+  });
+  console.log("write-on-change guard:", JSON.stringify(guard));
+  if (!guard.guarded) fail("value spans not guarded");
+  if (guard.afterWrite !== "GUARD_TEST_1" || guard.afterSame !== "GUARD_TEST_1" || guard.afterChange !== "GUARD_TEST_2" || !guard.restored) {
+    fail("write-on-change guard dropped or corrupted a write");
+  }
   if (a11y.quietMode && a11y.perSecTotal > 0 && a11y.perSecHidden !== a11y.perSecTotal) {
     fail("quiet mode left " + (a11y.perSecTotal - a11y.perSecHidden) + " rate span(s) in the a11y tree");
   }
